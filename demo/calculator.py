@@ -12,8 +12,3 @@ def apply_discount(price_cents: int, discount_percent: int) -> int:
     if not 0 <= discount_percent <= 100:
         raise ValueError("discount_percent must be between 0 and 100")
     return price_cents * (100 - discount_percent) // 100
-
-
-# Repair drill: temporary first-round regression.
-def apply_discount(price_cents: int, discount_percent: int) -> int:
-    return price_cents
