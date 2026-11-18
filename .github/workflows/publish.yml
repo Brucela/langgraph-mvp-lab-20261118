@@ -1,0 +1,55 @@
+name: Publish lab PR
+on:
+  workflow_dispatch:
+    inputs:
+      issue:
+        description: Issue number
+        required: true
+        type: string
+      sha:
+        description: Tested head commit
+        required: true
+        type: string
+      title:
+        description: PR title
+        required: true
+        type: string
+      body:
+        description: PR evidence
+        required: true
+        type: string
+permissions:
+  contents: read
+  pull-requests: write
+concurrency:
+  group: publish-${{ inputs.issue }}
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main' && github.actor == github.repository_owner
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      ISSUE: ${{ inputs.issue }}
+      EXPECTED_SHA: ${{ inputs.sha }}
+      PR_TITLE: ${{ inputs.title }}
+      PR_BODY: ${{ inputs.body }}
+    steps:
+      - name: Create or reconcile the PR
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$ISSUE" =~ ^[1-9][0-9]*$ && "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]
+          branch="ai/issue-$ISSUE"
+          issue_state="$(gh api "repos/$GITHUB_REPOSITORY/issues/$ISSUE" --jq '.state')"
+          [[ "$issue_state" == "open" ]]
+          actual_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$branch" --jq '.object.sha')"
+          [[ "$actual_sha" == "$EXPECTED_SHA" ]]
+          current="$(gh pr list --repo "$GITHUB_REPOSITORY" --state open --head "$branch" --base main --json number,url --jq '.[0].url // empty')"
+          if [[ -n "$current" ]]; then
+            printf '%s\n' "$current"
+          else
+            printf '%s\n' "$PR_BODY" > "$RUNNER_TEMP/pr-body.txt"
+            gh pr create --repo "$GITHUB_REPOSITORY" --head "$branch" --base main \
+              --title "$PR_TITLE" --body-file "$RUNNER_TEMP/pr-body.txt"
+          fi
